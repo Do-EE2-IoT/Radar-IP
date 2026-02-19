@@ -5,6 +5,8 @@ use std::io::Read;
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::PathBuf;
 use std::time::Duration;
+use tempfile::NamedTempFile;
+use std::io::Write;
 
 /// SSH authentication method.
 #[derive(Debug, Clone)]
@@ -14,6 +16,11 @@ pub enum AuthenticationMethod {
     /// Authenticate with a private key file and an optional passphrase.
     PrivateKey {
         path: PathBuf,
+        passphrase: Option<String>,
+    },
+    /// Authenticate with a private key loaded from memory (e.g. env var).
+    PrivateKeyMemory {
+        key_data: String,
         passphrase: Option<String>,
     },
 }
@@ -84,6 +91,33 @@ impl SshConfig {
                         &self.user,
                         None,
                         path,
+                        passphrase.as_deref(),
+                    )
+                    .map_err(|e| RadarError::PrivateKey(e.to_string()))?;
+            }
+            AuthenticationMethod::PrivateKeyMemory { key_data, passphrase } => {
+                // Normalize line endings (Windows CRLF → Unix LF) and ensure
+                // trailing newline — some key parsers are strict about this.
+                let clean_key = key_data.replace("\r\n", "\n");
+                let clean_key = if clean_key.ends_with('\n') {
+                    clean_key
+                } else {
+                    format!("{}\n", clean_key)
+                };
+
+                // Write key to temp file for file-based auth.
+                let mut tmp = NamedTempFile::new()
+                    .map_err(|e| RadarError::PrivateKey(format!("temp file: {}", e)))?;
+                tmp.write_all(clean_key.as_bytes())
+                    .map_err(|e| RadarError::PrivateKey(format!("write temp: {}", e)))?;
+                tmp.flush()
+                    .map_err(|e| RadarError::PrivateKey(format!("flush temp: {}", e)))?;
+
+                session
+                    .userauth_pubkey_file(
+                        &self.user,
+                        None,
+                        tmp.path(),
                         passphrase.as_deref(),
                     )
                     .map_err(|e| RadarError::PrivateKey(e.to_string()))?;

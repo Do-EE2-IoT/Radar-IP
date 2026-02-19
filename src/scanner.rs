@@ -2,7 +2,7 @@ use crate::errors::RadarError;
 use crate::ssh_client::SshConfig;
 use ipnet::Ipv4Net;
 use log::{info, warn};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::Semaphore;
 use tokio::task;
 
@@ -39,6 +39,9 @@ impl Scanner {
         let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT));
         let target_mac = self.target_mac.to_lowercase();
 
+        // Track the first auth/connection error for diagnostics.
+        let first_error: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
         let mut handles = Vec::with_capacity(hosts.len());
 
         for ip in hosts {
@@ -46,6 +49,7 @@ impl Scanner {
             let config = self.config.clone();
             let mac = target_mac.clone();
             let sem = semaphore.clone();
+            let err_slot = first_error.clone();
 
             let handle = task::spawn(async move {
                 // Acquire permit before blocking the thread pool.
@@ -62,8 +66,13 @@ impl Scanner {
                             }
                         }
                         Err(e) => {
-                            // Silently skip unreachable / auth-failed hosts.
-                            warn!("{}: {}", ip_str, e);
+                            // Store the first error for diagnostics.
+                            let msg = format!("{}: {}", ip_str, e);
+                            warn!("{}", msg);
+                            let mut slot = err_slot.lock().unwrap();
+                            if slot.is_none() {
+                                *slot = Some(msg);
+                            }
                             None
                         }
                     }
@@ -83,6 +92,15 @@ impl Scanner {
             }
         }
 
-        Err(RadarError::MacNotFound(self.target_mac.clone()))
+        // If we have a connection/auth error, show it instead of a generic "not found".
+        let first_err = first_error.lock().unwrap().take();
+        if let Some(err_msg) = first_err {
+            Err(RadarError::MacNotFound(format!(
+                "{}\n\nFirst error: {}",
+                self.target_mac, err_msg
+            )))
+        } else {
+            Err(RadarError::MacNotFound(self.target_mac.clone()))
+        }
     }
 }
