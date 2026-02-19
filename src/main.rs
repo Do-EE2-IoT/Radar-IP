@@ -27,4 +27,16 @@ fn main() {
     point_2.x = 7;
     println!("Point 1: ({}, {}, {})", point.x, point.y, point.z);
     println!("Point 2: ({}, {}, {})", point_2.x, point_2.y, point_2.z);
+
+    let numbers = vec![10, 20, 30];
+
+
+    let mut i = 0;
+    for num in numbers.iter() {
+        println!("Number: {}", num); // save 
+    }
+    while i <= numbers.len() {
+        println!("Number: {}", numbers[i]);
+        i += 1; // dead code, sẽ bị lỗi out of bounds khi i = 3
+    }
 }
