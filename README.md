@@ -73,6 +73,10 @@ radar-ip -m aa:bb:cc:dd:ee:ff -r 10.0.0.0/23 -u admin --key ~/.ssh/id_rsa
 radar-ip -m aa:bb:cc:dd:ee:ff -r 192.168.0.0/24 -k ~/.ssh/id_ed25519 -p "my passphrase"
 ```
 
+```bash
+PS D:\key\Tool\radar-ip\target\release> .\radar-ip.exe -m 84:fc:14:01:e0:73 -r 10.8.0.0/24 --user root -k "D:\key\hcg1_Lumi" -p "********"
+```
+
 ### Enable debug logging
 ```bash
 RUST_LOG=debug radar-ip -m aa:bb:cc:dd:ee:ff -r 192.168.1.0/24 -p secret
